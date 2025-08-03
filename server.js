@@ -7,6 +7,8 @@ const rateLimit = require('express-rate-limit');
 const Redis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 // Initialize Express app
 const app = express();
@@ -55,6 +57,44 @@ const chatMessages = new Map();
 // WebRTC signaling data
 const peerConnections = new Map();
 const streamData = new Map();
+
+// Authentication constants
+const JWT_SECRET = process.env.JWT_SECRET || 'webinar_platform_secret_key';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const SALT_ROUNDS = 10;
+
+// Authentication Middleware
+const authenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Check if user exists in Redis
+    const userData = await redis.get(`user:${decoded.userId}`);
+    if (!userData) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    req.user = {
+      id: decoded.userId,
+      ...JSON.parse(userData)
+    };
+    
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    return res.status(500).json({ error: 'Authentication error' });
+  }
+};
 
 // Webinar Class
 class Webinar {
@@ -137,16 +177,16 @@ class Participant {
 // API Routes
 
 // Create a new webinar
-app.post('/api/webinars', async (req, res) => {
+app.post('/api/webinars', authenticateToken, async (req, res) => {
   try {
-    const { title, hostName, maxParticipants = 500, settings = {} } = req.body;
+    const { title, maxParticipants = 500, settings = {} } = req.body;
     
-    if (!title || !hostName) {
-      return res.status(400).json({ error: 'Title and host name are required' });
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
     }
 
     const webinarId = `WEB-${uuidv4().slice(0, 8).toUpperCase()}`;
-    const hostId = uuidv4();
+    const hostId = req.user.id; // Use authenticated user ID as host ID
     
     const webinar = new Webinar(webinarId, title, hostId, maxParticipants);
     Object.assign(webinar.settings, settings);
@@ -158,6 +198,7 @@ app.post('/api/webinars', async (req, res) => {
       id: webinarId,
       title,
       hostId,
+      hostName: req.user.name, // Store host name from authenticated user
       maxParticipants,
       settings,
       createdAt: Date.now()
@@ -176,8 +217,125 @@ app.post('/api/webinars', async (req, res) => {
   }
 });
 
+// User Registration
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await redis.get(`user:email:${email}`);
+    if (existingUser) {
+      return res.status(409).json({ error: 'User with this email already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+    // Create user ID
+    const userId = uuidv4();
+
+    // Store user data in Redis
+    const userData = {
+      id: userId,
+      name,
+      email,
+      createdAt: Date.now()
+    };
+
+    // Store user data
+    await redis.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
+    await redis.setex(`user:email:${email}`, 86400, userId); // For email lookup
+    await redis.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+
+    // Generate JWT token
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      userId,
+      name,
+      email,
+      token
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+// User Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Find user by email
+    const userId = await redis.get(`user:email:${email}`);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Get user data
+    const userData = await redis.get(`user:${userId}`);
+    if (!userData) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Get hashed password
+    const hashedPassword = await redis.get(`user:password:${userId}`);
+    if (!hashedPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, hashedPassword);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    const user = JSON.parse(userData);
+    res.json({
+      message: 'Login successful',
+      userId,
+      name: user.name,
+      email: user.email,
+      token
+    });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// Get user profile
+app.get('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    res.json({
+      userId: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      createdAt: req.user.createdAt
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
 // Get webinar details
-app.get('/api/webinars/:id', async (req, res) => {
+app.get('/api/webinars/:id', authenticateToken, async (req, res) => {
   try {
     const webinarId = req.params.id;
     let webinar = webinars.get(webinarId);
@@ -205,14 +363,13 @@ app.get('/api/webinars/:id', async (req, res) => {
 });
 
 // Join webinar endpoint
-app.post('/api/webinars/:id/join', async (req, res) => {
+app.post('/api/webinars/:id/join', authenticateToken, async (req, res) => {
   try {
     const webinarId = req.params.id;
-    const { participantName, role = 'attendee' } = req.body;
+    const { role = 'attendee' } = req.body;
     
-    if (!participantName) {
-      return res.status(400).json({ error: 'Participant name is required' });
-    }
+    // Use authenticated user's name instead of requiring participantName
+    const participantName = req.user.name;
 
     const webinar = webinars.get(webinarId);
     if (!webinar) {
@@ -223,7 +380,7 @@ app.post('/api/webinars/:id/join', async (req, res) => {
       return res.status(403).json({ error: 'Webinar is at maximum capacity' });
     }
 
-    const participantId = uuidv4();
+    const participantId = req.user.id; // Use authenticated user ID as participant ID
     const participant = new Participant(participantId, participantName, null, role);
     
     participants.set(participantId, participant);
@@ -243,7 +400,7 @@ app.post('/api/webinars/:id/join', async (req, res) => {
 });
 
 // Get chat messages
-app.get('/api/webinars/:id/messages', async (req, res) => {
+app.get('/api/webinars/:id/messages', authenticateToken, async (req, res) => {
   try {
     const webinarId = req.params.id;
     const messages = chatMessages.get(webinarId) || [];
@@ -259,16 +416,54 @@ app.get('/api/webinars/:id/messages', async (req, res) => {
 });
 
 // WebSocket Event Handlers
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`Client connected: ${socket.id}`);
   
-  let currentParticipant = null;
-  let currentWebinar = null;
+  // Extract JWT token from query parameters
+  const token = socket.handshake.query.token;
+  if (!token) {
+    console.log('No token provided');
+    socket.disconnect(true);
+    return;
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user data from Redis
+    const userData = await redis.get(`user:${decoded.userId}`);
+    if (!userData) {
+      console.log('User not found');
+      socket.disconnect(true);
+      return;
+    }
+
+    // Attach user data to socket
+    socket.user = {
+      id: decoded.userId,
+      ...JSON.parse(userData)
+    };
+
+    console.log(`User connected: ${socket.user.id} (${socket.user.name})`);
+
+    let currentParticipant = null;
+    let currentWebinar = null;
+
+  } catch (error) {
+    console.error('Authentication error:', error);
+    socket.disconnect(true);
+    return;
+  }
 
   // Join webinar room
   socket.on('join-webinar', async (data) => {
     try {
-      const { webinarId, participantId, participantName, role } = data;
+      const { webinarId, role } = data;
+      
+      // Use authenticated user data
+      const participantId = socket.user.id;
+      const participantName = socket.user.name;
       
       const webinar = webinars.get(webinarId);
       if (!webinar) {
