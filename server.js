@@ -588,37 +588,40 @@ io.on('connection', async (socket) => {
 
   // WebRTC Signaling
   socket.on('webrtc-offer', (data) => {
-    const { targetParticipantId, offer } = data;
+    const { targetParticipantId, offer, connectionId } = data;
     const targetParticipant = participants.get(targetParticipantId);
     
     if (targetParticipant && targetParticipant.socketId) {
       io.to(targetParticipant.socketId).emit('webrtc-offer', {
         fromParticipantId: currentParticipant?.id,
-        offer
+        offer,
+        connectionId
       });
     }
   });
 
   socket.on('webrtc-answer', (data) => {
-    const { targetParticipantId, answer } = data;
+    const { targetParticipantId, answer, connectionId } = data;
     const targetParticipant = participants.get(targetParticipantId);
     
     if (targetParticipant && targetParticipant.socketId) {
       io.to(targetParticipant.socketId).emit('webrtc-answer', {
         fromParticipantId: currentParticipant?.id,
-        answer
+        answer,
+        connectionId
       });
     }
   });
 
   socket.on('webrtc-ice-candidate', (data) => {
-    const { targetParticipantId, candidate } = data;
+    const { targetParticipantId, candidate, connectionId } = data;
     const targetParticipant = participants.get(targetParticipantId);
     
     if (targetParticipant && targetParticipant.socketId) {
       io.to(targetParticipant.socketId).emit('webrtc-ice-candidate', {
         fromParticipantId: currentParticipant?.id,
-        candidate
+        candidate,
+        connectionId
       });
     }
   });
@@ -684,6 +687,27 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // WebRTC connection management
+  socket.on('create-peer-connection', (data) => {
+    const { targetParticipantId, streamType } = data;
+    const targetParticipant = participants.get(targetParticipantId);
+    
+    if (targetParticipant && targetParticipant.socketId) {
+      const connectionId = `${currentParticipant.id}-${targetParticipantId}-${Date.now()}`;
+      io.to(targetParticipant.socketId).emit('peer-connection-request', {
+        fromParticipantId: currentParticipant.id,
+        connectionId,
+        streamType
+      });
+    }
+  });
+
+  socket.on('close-peer-connection', (data) => {
+    const { connectionId } = data;
+    // In a real implementation, you would close the peer connection
+    console.log(`Peer connection closed: ${connectionId}`);
+  });
+
   // Disconnect handling
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
@@ -736,12 +760,53 @@ process.on('SIGTERM', () => {
   });
 });
 
+// Function to create default admin user
+async function createDefaultAdminUser() {
+  try {
+    const adminEmail = 'dikshadhasmana230204@gmail.com';
+    const adminPassword = 'admin';
+    const adminName = 'Admin User';
+    
+    // Check if admin user already exists
+    const existingUserId = await redis.get(`user:email:${adminEmail}`);
+    if (existingUserId) {
+      console.log('✅ Default admin user already exists');
+      return;
+    }
+    
+    // Create admin user
+    const userId = uuidv4();
+    const hashedPassword = await bcrypt.hash(adminPassword, SALT_ROUNDS);
+    
+    const userData = {
+      id: userId,
+      name: adminName,
+      email: adminEmail,
+      createdAt: Date.now()
+    };
+    
+    // Store user data in Redis
+    await redis.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
+    await redis.setex(`user:email:${adminEmail}`, 86400, userId); // For email lookup
+    await redis.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+    
+    console.log('✅ Default admin user created successfully');
+    console.log(`📧 Email: ${adminEmail}`);
+    console.log(`🔑 Password: ${adminPassword} (change after first login)`);
+  } catch (error) {
+    console.error('❌ Error creating default admin user:', error);
+  }
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Webinar server running on port ${PORT}`);
   console.log(`📊 Redis connected: ${redis.status}`);
   console.log(`🎥 WebRTC signaling ready`);
   console.log(`💬 Socket.IO ready for ${process.env.NODE_ENV || 'development'} mode`);
+  
+  // Create default admin user
+  await createDefaultAdminUser();
 });
 
-module.exports = { app, server, io };
+module.exports = { app, server, io, createDefaultAdminUser };
