@@ -122,3 +122,4 @@ npm-debug.log*
 # Ignore public uploads or temp files if any (optional)
 # public/uploads/
 # public/temp/
+TODO.md

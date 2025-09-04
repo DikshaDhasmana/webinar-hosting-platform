@@ -4,11 +4,81 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const Redis = require('ioredis');
+const redis = require('redis');
+
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webinar-platform', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Define schemas and models
+const userSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: String,
+  email: { type: String, required: true, unique: true },
+  password: String,
+  createdAt: Date
+});
+const User = mongoose.model('User', userSchema);
+
+const webinarSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  title: String,
+  hostId: String,
+  hostName: String,
+  maxParticipants: Number,
+  settings: Object,
+  createdAt: Date,
+  isLive: Boolean,
+  startTime: Date,
+  endTime: Date,
+  participants: [String],
+  presenters: [String],
+  moderators: [String]
+});
+const Webinar = mongoose.model('Webinar', webinarSchema);
+
+const participantSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: String,
+  socketId: String,
+  role: String,
+  joinTime: Date,
+  isAudioEnabled: Boolean,
+  isVideoEnabled: Boolean,
+  isScreenSharing: Boolean,
+  currentWebinar: String
+});
+const Participant = mongoose.model('Participant', participantSchema);
+
+const chatMessageSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  webinarId: String,
+  participantId: String,
+  participantName: String,
+  message: String,
+  timestamp: Date,
+  role: String
+});
+const ChatMessage = mongoose.model('ChatMessage', chatMessageSchema);
+
+// Initialize Redis client
+const redisClient = redis.createClient({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: process.env.REDIS_PORT || 6379,
+  password: process.env.REDIS_PASSWORD || undefined
+});
+
+redisClient.on('connect', () => console.log('Redis connected'));
+redisClient.on('error', (err) => console.error('Redis connection error:', err));
 
 // Initialize Express app
 const app = express();
@@ -25,16 +95,7 @@ const io = socketIo(server, {
   pingInterval: 25000
 });
 
-// Redis setup for scalability
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3
-});
 
-const redisAdapter = require('@socket.io/redis-adapter');
-io.adapter(redisAdapter.createAdapter(redis, redis.duplicate()));
 
 // Middleware
 app.use(cors());
@@ -75,18 +136,20 @@ const authenticateToken = async (req, res, next) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Check if user exists in Redis
-    const userData = await redis.get(`user:${decoded.userId}`);
-    if (!userData) {
+
+    // Check if user exists in MongoDB
+    const user = await User.findOne({ id: decoded.userId });
+    if (!user) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
     req.user = {
-      id: decoded.userId,
-      ...JSON.parse(userData)
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt
     };
-    
+
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -96,83 +159,7 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Webinar Class
-class Webinar {
-  constructor(id, title, hostId, maxParticipants = 500) {
-    this.id = id;
-    this.title = title;
-    this.hostId = hostId;
-    this.maxParticipants = maxParticipants;
-    this.participants = new Set();
-    this.presenters = new Set();
-    this.moderators = new Set();
-    this.isLive = false;
-    this.startTime = null;
-    this.endTime = null;
-    this.chatEnabled = true;
-    this.recordingEnabled = false;
-    this.settings = {
-      allowParticipantVideo: false,
-      allowParticipantAudio: false,
-      requireModeration: false
-    };
-  }
 
-  addParticipant(userId, role = 'attendee') {
-    if (this.participants.size >= this.maxParticipants) {
-      throw new Error('Webinar is at maximum capacity');
-    }
-    
-    this.participants.add(userId);
-    
-    if (role === 'presenter') {
-      this.presenters.add(userId);
-    } else if (role === 'moderator') {
-      this.moderators.add(userId);
-    }
-    
-    return true;
-  }
-
-  removeParticipant(userId) {
-    this.participants.delete(userId);
-    this.presenters.delete(userId);
-    this.moderators.delete(userId);
-  }
-
-  canUserSpeak(userId) {
-    return this.hostId === userId || 
-           this.presenters.has(userId) || 
-           this.moderators.has(userId);
-  }
-
-  getStats() {
-    return {
-      id: this.id,
-      title: this.title,
-      participantCount: this.participants.size,
-      presenterCount: this.presenters.size,
-      isLive: this.isLive,
-      startTime: this.startTime,
-      duration: this.startTime ? Date.now() - this.startTime : 0
-    };
-  }
-}
-
-// Participant Class
-class Participant {
-  constructor(id, name, socketId, role = 'attendee') {
-    this.id = id;
-    this.name = name;
-    this.socketId = socketId;
-    this.role = role;
-    this.joinTime = Date.now();
-    this.isAudioEnabled = false;
-    this.isVideoEnabled = false;
-    this.isScreenSharing = false;
-    this.currentWebinar = null;
-  }
-}
 
 // API Routes
 
@@ -194,7 +181,7 @@ app.post('/api/webinars', authenticateToken, async (req, res) => {
     webinars.set(webinarId, webinar);
     
     // Store in Redis for persistence
-    await redis.setex(`webinar:${webinarId}`, 86400, JSON.stringify({
+    await redisClient.setex(`webinar:${webinarId}`, 86400, JSON.stringify({
       id: webinarId,
       title,
       hostId,
@@ -228,7 +215,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await redis.get(`user:email:${email}`);
+    const existingUser = await redisClient.get(`user:email:${email}`);
     if (existingUser) {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
@@ -248,9 +235,9 @@ app.post('/api/auth/register', async (req, res) => {
     };
 
     // Store user data
-    await redis.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
-    await redis.setex(`user:email:${email}`, 86400, userId); // For email lookup
-    await redis.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+    await redisClient.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
+    await redisClient.setex(`user:email:${email}`, 86400, userId); // For email lookup
+    await redisClient.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
 
     // Generate JWT token
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -279,19 +266,19 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Find user by email
-    const userId = await redis.get(`user:email:${email}`);
+    const userId = await redisClient.get(`user:email:${email}`);
     if (!userId) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Get user data
-    const userData = await redis.get(`user:${userId}`);
+    const userData = await redisClient.get(`user:${userId}`);
     if (!userData) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Get hashed password
-    const hashedPassword = await redis.get(`user:password:${userId}`);
+    const hashedPassword = await redisClient.get(`user:password:${userId}`);
     if (!hashedPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -342,7 +329,7 @@ app.get('/api/webinars/:id', authenticateToken, async (req, res) => {
     
     if (!webinar) {
       // Try to load from Redis
-      const webinarData = await redis.get(`webinar:${webinarId}`);
+      const webinarData = await redisClient.get(`webinar:${webinarId}`);
       if (webinarData) {
         const data = JSON.parse(webinarData);
         webinar = new Webinar(data.id, data.title, data.hostId, data.maxParticipants);
@@ -432,7 +419,7 @@ io.on('connection', async (socket) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Get user data from Redis
-    const userData = await redis.get(`user:${decoded.userId}`);
+    const userData = await redisClient.get(`user:${decoded.userId}`);
     if (!userData) {
       console.log('User not found');
       socket.disconnect(true);
@@ -520,7 +507,7 @@ io.on('connection', async (socket) => {
       });
 
       // Store participant count in Redis
-      await redis.setex(`webinar:${webinarId}:count`, 300, webinar.participants.size);
+      await redisClient.setex(`webinar:${webinarId}:count`, 300, webinar.participants.size);
 
     } catch (error) {
       console.error('Error joining webinar:', error);
@@ -543,9 +530,9 @@ io.on('connection', async (socket) => {
 
       // Rate limiting for chat (10 messages per minute)
       const rateLimitKey = `chat:${currentParticipant.id}`;
-      const messageCount = await redis.incr(rateLimitKey);
+      const messageCount = await redisClient.incr(rateLimitKey);
       if (messageCount === 1) {
-        await redis.expire(rateLimitKey, 60);
+        await redisClient.expire(rateLimitKey, 60);
       }
       if (messageCount > 10) {
         socket.emit('error', { message: 'Chat rate limit exceeded' });
@@ -577,8 +564,8 @@ io.on('connection', async (socket) => {
       io.to(currentWebinar.id).emit('chat-message', chatMessage);
 
       // Store in Redis for persistence
-      await redis.lpush(`messages:${currentWebinar.id}`, JSON.stringify(chatMessage));
-      await redis.ltrim(`messages:${currentWebinar.id}`, 0, 999);
+      await redisClient.lpush(`messages:${currentWebinar.id}`, JSON.stringify(chatMessage));
+      await redisClient.ltrim(`messages:${currentWebinar.id}`, 0, 999);
 
     } catch (error) {
       console.error('Error handling chat message:', error);
@@ -755,7 +742,7 @@ app.use((error, req, res, next) => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
-    redis.disconnect();
+    redisClient.disconnect();
     process.exit(0);
   });
 });
@@ -768,7 +755,7 @@ async function createDefaultAdminUser() {
     const adminName = 'Admin User';
     
     // Check if admin user already exists
-    const existingUserId = await redis.get(`user:email:${adminEmail}`);
+    const existingUserId = await redisClient.get(`user:email:${adminEmail}`);
     if (existingUserId) {
       console.log('✅ Default admin user already exists');
       return;
@@ -786,9 +773,9 @@ async function createDefaultAdminUser() {
     };
     
     // Store user data in Redis
-    await redis.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
-    await redis.setex(`user:email:${adminEmail}`, 86400, userId); // For email lookup
-    await redis.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+    await redisClient.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
+    await redisClient.setex(`user:email:${adminEmail}`, 86400, userId); // For email lookup
+    await redisClient.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
     
     console.log('✅ Default admin user created successfully');
     console.log(`📧 Email: ${adminEmail}`);
@@ -801,7 +788,7 @@ async function createDefaultAdminUser() {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
   console.log(`🚀 Webinar server running on port ${PORT}`);
-  console.log(`📊 Redis connected: ${redis.status}`);
+  console.log(`📊 Redis connected: ${redisClient.status}`);
   console.log(`🎥 WebRTC signaling ready`);
   console.log(`💬 Socket.IO ready for ${process.env.NODE_ENV || 'development'} mode`);
   
