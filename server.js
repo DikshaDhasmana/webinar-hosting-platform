@@ -77,8 +77,19 @@ const redisClient = redis.createClient({
   password: process.env.REDIS_PASSWORD || undefined
 });
 
-redisClient.on('connect', () => console.log('Redis connected'));
-redisClient.on('error', (err) => console.error('Redis connection error:', err));
+redisClient.on('connect', () => console.log('✅ Redis connected'));
+redisClient.on('error', (err) => console.error('❌ Redis connection error:', err));
+redisClient.on('ready', () => console.log('📊 Redis client ready'));
+redisClient.on('end', () => console.log('🔌 Redis connection ended'));
+
+// Connect to Redis
+(async () => {
+  try {
+    await redisClient.connect();
+  } catch (error) {
+    console.error('❌ Failed to connect to Redis:', error);
+  }
+})();
 
 // Initialize Express app
 const app = express();
@@ -181,7 +192,7 @@ app.post('/api/webinars', authenticateToken, async (req, res) => {
     webinars.set(webinarId, webinar);
     
     // Store in Redis for persistence
-    await redisClient.setex(`webinar:${webinarId}`, 86400, JSON.stringify({
+    await redisClient.set(`webinar:${webinarId}`, JSON.stringify({
       id: webinarId,
       title,
       hostId,
@@ -189,7 +200,7 @@ app.post('/api/webinars', authenticateToken, async (req, res) => {
       maxParticipants,
       settings,
       createdAt: Date.now()
-    }));
+    }), { EX: 86400 });
 
     res.status(201).json({
       webinarId,
@@ -235,9 +246,9 @@ app.post('/api/auth/register', async (req, res) => {
     };
 
     // Store user data
-    await redisClient.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
-    await redisClient.setex(`user:email:${email}`, 86400, userId); // For email lookup
-    await redisClient.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+    await redisClient.set(`user:${userId}`, JSON.stringify(userData), { EX: 86400 }); // 24 hours
+    await redisClient.set(`user:email:${email}`, userId, { EX: 86400 }); // For email lookup
+    await redisClient.set(`user:password:${userId}`, hashedPassword, { EX: 86400 }); // Store hashed password
 
     // Generate JWT token
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -507,7 +518,7 @@ io.on('connection', async (socket) => {
       });
 
       // Store participant count in Redis
-      await redisClient.setex(`webinar:${webinarId}:count`, 300, webinar.participants.size);
+      await redisClient.set(`webinar:${webinarId}:count`, webinar.participants.size, { EX: 300 });
 
     } catch (error) {
       console.error('Error joining webinar:', error);
@@ -773,9 +784,9 @@ async function createDefaultAdminUser() {
     };
     
     // Store user data in Redis
-    await redisClient.setex(`user:${userId}`, 86400, JSON.stringify(userData)); // 24 hours
-    await redisClient.setex(`user:email:${adminEmail}`, 86400, userId); // For email lookup
-    await redisClient.setex(`user:password:${userId}`, 86400, hashedPassword); // Store hashed password
+    await redisClient.set(`user:${userId}`, JSON.stringify(userData), { EX: 86400 }); // 24 hours
+    await redisClient.set(`user:email:${adminEmail}`, userId, { EX: 86400 }); // For email lookup
+    await redisClient.set(`user:password:${userId}`, hashedPassword, { EX: 86400 }); // Store hashed password
     
     console.log('✅ Default admin user created successfully');
     console.log(`📧 Email: ${adminEmail}`);
@@ -788,10 +799,10 @@ async function createDefaultAdminUser() {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
   console.log(`🚀 Webinar server running on port ${PORT}`);
-  console.log(`📊 Redis connected: ${redisClient.status}`);
+  console.log(`📊 Redis client initialized`);
   console.log(`🎥 WebRTC signaling ready`);
   console.log(`💬 Socket.IO ready for ${process.env.NODE_ENV || 'development'} mode`);
-  
+
   // Create default admin user
   await createDefaultAdminUser();
 });

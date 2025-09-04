@@ -117,10 +117,10 @@ class WebRTCHandler extends EventEmitter {
       });
 
       // Store in Redis for persistence across server instances
-      await this.redis.setex(
-        `webrtc:offer:${connectionId}`, 
-        300, // 5 minutes TTL
-        JSON.stringify({ offer, streamType, timestamp: Date.now() })
+      await redisClient.set(
+        `webrtc:offer:${connectionId}`,
+        JSON.stringify({ offer, streamType, timestamp: Date.now() }),
+        { EX: 300 } // 5 minutes TTL
       );
     } else {
       socket.emit('webrtc-error', { message: 'Target participant not found' });
@@ -150,10 +150,10 @@ class WebRTCHandler extends EventEmitter {
       });
 
       // Store in Redis
-      await this.redis.setex(
-        `webrtc:answer:${connectionId}`, 
-        300,
-        JSON.stringify({ answer, timestamp: Date.now() })
+      await redisClient.set(
+        `webrtc:answer:${connectionId}`,
+        JSON.stringify({ answer, timestamp: Date.now() }),
+        { EX: 300 }
       );
     }
   }
@@ -218,10 +218,10 @@ class WebRTCHandler extends EventEmitter {
     });
 
     // Store in Redis for load balancing
-    await this.redis.setex(
-      `streaming:${sessionId}`, 
-      3600, // 1 hour
-      JSON.stringify(streamingSession)
+    await redisClient.set(
+      `streaming:${sessionId}`,
+      JSON.stringify(streamingSession),
+      { EX: 3600 } // 1 hour
     );
   }
 
@@ -246,7 +246,7 @@ class WebRTCHandler extends EventEmitter {
 
     // Cleanup
     this.streamingSessions.delete(sessionId);
-    await this.redis.del(`streaming:${sessionId}`);
+    await redisClient.del(`streaming:${sessionId}`);
 
     socket.emit('streaming-stopped', { sessionId });
   }
@@ -348,9 +348,9 @@ class WebRTCHandler extends EventEmitter {
 
   async validatePeerConnection(initiatorId, targetId, webinarId) {
     // Check if both participants are in the same webinar
-    const initiatorInWebinar = await this.redis.sismember(`webinar:${webinarId}:participants`, initiatorId);
-    const targetInWebinar = await this.redis.sismember(`webinar:${webinarId}:participants`, targetId);
-    
+    const initiatorInWebinar = await redisClient.sismember(`webinar:${webinarId}:participants`, initiatorId);
+    const targetInWebinar = await redisClient.sismember(`webinar:${webinarId}:participants`, targetId);
+
     return initiatorInWebinar && targetInWebinar;
   }
 
