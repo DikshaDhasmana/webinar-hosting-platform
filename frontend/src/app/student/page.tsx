@@ -1,4 +1,100 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+
+interface Webinar {
+  id: string;
+  title: string;
+  hostId: string;
+  hostName: string;
+  maxParticipants: number;
+  isLive: boolean;
+  startTime?: Date;
+  endTime?: Date;
+  participants: string[];
+  createdAt: Date;
+}
+
+interface StudentStats {
+  enrolledWebinars: number;
+  completedWebinars: number;
+  availableRecordings: number;
+}
+
 export default function StudentDashboard() {
+  const { token } = useAuth();
+  const [stats, setStats] = useState<StudentStats>({
+    enrolledWebinars: 0,
+    completedWebinars: 0,
+    availableRecordings: 0
+  });
+  const [upcomingWebinars, setUpcomingWebinars] = useState<Webinar[]>([]);
+  const [recentRecordings, setRecentRecordings] = useState<Webinar[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const response = await fetch('/api/webinars', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const webinars = await response.json();
+
+        // Calculate stats
+        const enrolledWebinars = webinars.length;
+        const completedWebinars = webinars.filter((w: Webinar) => w.startTime && !w.isLive).length;
+        const availableRecordings = completedWebinars; // Assuming all completed webinars have recordings
+
+        setStats({
+          enrolledWebinars,
+          completedWebinars,
+          availableRecordings
+        });
+
+        // Separate upcoming and recent recordings
+        const liveWebinars = webinars.filter((w: Webinar) => w.isLive);
+        const scheduledWebinars = webinars.filter((w: Webinar) => !w.isLive && !w.startTime);
+        const completedWebinarsList = webinars.filter((w: Webinar) => w.startTime && !w.isLive);
+
+        setUpcomingWebinars([...liveWebinars, ...scheduledWebinars].slice(0, 5));
+        setRecentRecordings(completedWebinarsList.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleJoinWebinar = (webinarId: string) => {
+    // Navigate to webinar room or implement join logic
+    console.log('Joining webinar:', webinarId);
+  };
+
+  const handleWatchRecording = (webinarId: string) => {
+    // Navigate to recording page or implement watch logic
+    console.log('Watching recording:', webinarId);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="px-4 py-6 sm:px-0">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-8">
@@ -18,7 +114,7 @@ export default function StudentDashboard() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Enrolled Webinars</dt>
-                  <dd className="text-lg font-medium text-gray-900">8</dd>
+                  <dd className="text-lg font-medium text-gray-900">{stats.enrolledWebinars}</dd>
                 </dl>
               </div>
             </div>
@@ -36,7 +132,7 @@ export default function StudentDashboard() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Completed</dt>
-                  <dd className="text-lg font-medium text-gray-900">5</dd>
+                  <dd className="text-lg font-medium text-gray-900">{stats.completedWebinars}</dd>
                 </dl>
               </div>
             </div>
@@ -54,7 +150,7 @@ export default function StudentDashboard() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Available Recordings</dt>
-                  <dd className="text-lg font-medium text-gray-900">12</dd>
+                  <dd className="text-lg font-medium text-gray-900">{stats.availableRecordings}</dd>
                 </dl>
               </div>
             </div>
@@ -67,61 +163,59 @@ export default function StudentDashboard() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">Upcoming Webinars</h3>
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              <li>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-700">JS</span>
+              {upcomingWebinars.length === 0 ? (
+                <li>
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-gray-600">No upcoming webinars</p>
+                  </div>
+                </li>
+              ) : (
+                upcomingWebinars.map((webinar) => (
+                  <li key={webinar.id}>
+                    <div className="px-4 py-4 sm:px-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                              <span className="text-sm font-medium text-gray-700">
+                                {webinar.title.substring(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{webinar.title}</div>
+                            <div className="text-sm text-gray-500">
+                              {webinar.participants.length} participants • Created {new Date(webinar.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            webinar.isLive
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {webinar.isLive ? 'Live' : 'Scheduled'}
+                          </span>
                         </div>
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">JavaScript Fundamentals</div>
-                        <div className="text-sm text-gray-500">Today at 2:00 PM</div>
+                      <div className="mt-2">
+                        <button
+                          onClick={() => handleJoinWebinar(webinar.id)}
+                          disabled={!webinar.isLive}
+                          className={`px-3 py-1 rounded text-sm ${
+                            webinar.isLive
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                              : 'bg-gray-600 hover:bg-gray-700 text-white'
+                          }`}
+                        >
+                          {webinar.isLive ? 'Join Now' : 'Reminder Set'}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Live
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
-                      Join Now
-                    </button>
-                  </div>
-                </div>
-              </li>
-
-              <li>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-700">RE</span>
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">React Best Practices</div>
-                        <div className="text-sm text-gray-500">Tomorrow at 10:00 AM</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        Scheduled
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <button className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">
-                      Reminder Set
-                    </button>
-                  </div>
-                </div>
-              </li>
+                  </li>
+                ))
+              )}
             </ul>
           </div>
         </div>
@@ -130,47 +224,43 @@ export default function StudentDashboard() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Recordings</h3>
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              <li>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-700">PY</span>
+              {recentRecordings.length === 0 ? (
+                <li>
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-gray-600">No recordings available</p>
+                  </div>
+                </li>
+              ) : (
+                recentRecordings.map((webinar) => (
+                  <li key={webinar.id}>
+                    <div className="px-4 py-4 sm:px-6">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                            <span className="text-sm font-medium text-gray-700">
+                              {webinar.title.substring(0, 2).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{webinar.title}</div>
+                          <div className="text-sm text-gray-500">
+                            Completed {webinar.startTime ? new Date(webinar.startTime).toLocaleDateString() : 'Recently'} • {webinar.participants.length} participants
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <button
+                          onClick={() => handleWatchRecording(webinar.id)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                        >
+                          Watch Recording
+                        </button>
                       </div>
                     </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">Python for Data Science</div>
-                      <div className="text-sm text-gray-500">Completed 2 days ago • 2h 15m</div>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <button className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
-                      Watch Recording
-                    </button>
-                  </div>
-                </div>
-              </li>
-
-              <li>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-700">DB</span>
-                      </div>
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">Database Design Principles</div>
-                      <div className="text-sm text-gray-500">Completed 1 week ago • 1h 45m</div>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <button className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
-                      Watch Recording
-                    </button>
-                  </div>
-                </div>
-              </li>
+                  </li>
+                ))
+              )}
             </ul>
           </div>
         </div>

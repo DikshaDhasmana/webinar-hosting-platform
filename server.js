@@ -11,6 +11,8 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const Webinar = require('./models/Webinar');
+const Participant = require('./models/Participant');
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webinar-platform', {
@@ -29,6 +31,7 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
+// Webinar schema for MongoDB persistence
 const webinarSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   title: String,
@@ -44,7 +47,7 @@ const webinarSchema = new mongoose.Schema({
   presenters: [String],
   moderators: [String]
 });
-const Webinar = mongoose.model('Webinar', webinarSchema);
+const WebinarModel = mongoose.model('Webinar', webinarSchema);
 
 const participantSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
@@ -57,7 +60,7 @@ const participantSchema = new mongoose.Schema({
   isScreenSharing: Boolean,
   currentWebinar: String
 });
-const Participant = mongoose.model('Participant', participantSchema);
+const ParticipantModel = mongoose.model('Participant', participantSchema);
 
 const chatMessageSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
@@ -111,7 +114,6 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static('public'));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -148,12 +150,13 @@ const authenticateToken = async (req, res, next) => {
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Check if user exists in MongoDB
-    const user = await User.findOne({ id: decoded.userId });
-    if (!user) {
+    // Check if user exists in Redis
+    const userData = await redisClient.get(`user:${decoded.userId}`);
+    if (!userData) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
+    const user = JSON.parse(userData);
     req.user = {
       id: user.id,
       name: user.name,
@@ -186,6 +189,7 @@ app.post('/api/webinars', authenticateToken, async (req, res) => {
     const webinarId = `WEB-${uuidv4().slice(0, 8).toUpperCase()}`;
     const hostId = req.user.id; // Use authenticated user ID as host ID
     
+    // Use the Webinar class (imported from models/Webinar.js)
     const webinar = new Webinar(webinarId, title, hostId, maxParticipants);
     Object.assign(webinar.settings, settings);
     
@@ -332,12 +336,47 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all webinars for the authenticated user
+app.get('/api/webinars', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userWebinars = [];
+
+    // Get all webinar keys from Redis that belong to this user
+    const webinarKeys = await redisClient.keys(`webinar:*`);
+    for (const key of webinarKeys) {
+      const webinarData = await redisClient.get(key);
+      if (webinarData) {
+        const data = JSON.parse(webinarData);
+        // Only include webinars created by this user
+        if (data.hostId === userId) {
+          userWebinars.push({
+            id: data.id,
+            title: data.title,
+            hostId: data.hostId,
+            hostName: data.hostName,
+            maxParticipants: data.maxParticipants,
+            isLive: false, // Default to false, would need real-time status
+            participants: [], // Initialize as empty array
+            createdAt: data.createdAt
+          });
+        }
+      }
+    }
+
+    res.json(userWebinars);
+  } catch (error) {
+    console.error('Error fetching webinars:', error);
+    res.status(500).json({ error: 'Failed to fetch webinars' });
+  }
+});
+
 // Get webinar details
 app.get('/api/webinars/:id', authenticateToken, async (req, res) => {
   try {
     const webinarId = req.params.id;
     let webinar = webinars.get(webinarId);
-    
+
     if (!webinar) {
       // Try to load from Redis
       const webinarData = await redisClient.get(`webinar:${webinarId}`);
@@ -348,7 +387,7 @@ app.get('/api/webinars/:id', authenticateToken, async (req, res) => {
         webinars.set(webinarId, webinar);
       }
     }
-    
+
     if (!webinar) {
       return res.status(404).json({ error: 'Webinar not found' });
     }

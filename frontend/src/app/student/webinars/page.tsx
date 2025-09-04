@@ -1,51 +1,79 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface Webinar {
+  id: string;
+  title: string;
+  hostId: string;
+  hostName: string;
+  maxParticipants: number;
+  isLive: boolean;
+  startTime?: Date;
+  endTime?: Date;
+  participants: string[];
+  createdAt: Date;
+}
 
 export default function StudentWebinarsPage() {
-  const [selectedWebinar, setSelectedWebinar] = useState<string | null>(null);
+  const { token } = useAuth();
+  const [webinars, setWebinars] = useState<Webinar[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedWebinar, setSelectedWebinar] = useState<Webinar | null>(null);
 
-  const webinars = [
-    {
-      id: '1',
-      title: 'JavaScript Fundamentals',
-      instructor: 'John Doe',
-      date: 'Today',
-      time: '2:00 PM',
-      duration: '90 min',
-      participants: 25,
-      status: 'live',
-      description: 'Learn the basics of JavaScript programming'
-    },
-    {
-      id: '2',
-      title: 'React Best Practices',
-      instructor: 'Jane Smith',
-      date: 'Tomorrow',
-      time: '10:00 AM',
-      duration: '60 min',
-      participants: 0,
-      status: 'scheduled',
-      description: 'Advanced React patterns and best practices'
-    },
-    {
-      id: '3',
-      title: 'Python for Data Science',
-      instructor: 'Mike Johnson',
-      date: 'Dec 15',
-      time: '3:00 PM',
-      duration: '120 min',
-      participants: 45,
-      status: 'completed',
-      description: 'Introduction to Python for data analysis'
+  useEffect(() => {
+    fetchWebinars();
+  }, []);
+
+  const fetchWebinars = async () => {
+    try {
+      const response = await fetch('/api/webinars', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch webinars');
+      }
+
+      const data = await response.json();
+      setWebinars(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  ];
-
-  const handleJoinWebinar = (webinarId: string) => {
-    // TODO: Implement WebRTC connection and join webinar
-    console.log('Joining webinar:', webinarId);
-    setSelectedWebinar(webinarId);
   };
+
+  const handleJoinWebinar = (webinar: Webinar) => {
+    if (webinar.isLive) {
+      setSelectedWebinar(webinar);
+      // TODO: Implement WebRTC connection
+      console.log('Joining webinar:', webinar.id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="px-4 py-6 sm:px-0">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading webinars...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-6 sm:px-0">
+        <div className="text-center text-red-600">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -54,73 +82,66 @@ export default function StudentWebinarsPage() {
         <p className="mt-1 text-sm text-gray-600">Join live sessions or view scheduled webinars</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {webinars.map((webinar) => (
-          <div key={webinar.id} className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">{webinar.title}</h3>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  webinar.status === 'live'
-                    ? 'bg-green-100 text-green-800'
-                    : webinar.status === 'scheduled'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {webinar.status === 'live' ? 'Live' : webinar.status === 'scheduled' ? 'Scheduled' : 'Completed'}
-                </span>
+      {webinars.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-600">No webinars available at the moment.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {webinars.map((webinar) => (
+            <div key={webinar.id} className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">{webinar.title}</h3>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    webinar.isLive
+                      ? 'bg-green-100 text-green-800'
+                      : webinar.startTime
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {webinar.isLive ? 'Live' : webinar.startTime ? 'Completed' : 'Scheduled'}
+                  </span>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Host:</span>
+                    <span className="text-gray-900">{webinar.hostName}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Participants:</span>
+                    <span className="text-gray-900">{webinar.participants.length}/{webinar.maxParticipants}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Created:</span>
+                    <span className="text-gray-900">{new Date(webinar.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleJoinWebinar(webinar)}
+                  disabled={!webinar.isLive}
+                  className={`w-full px-4 py-2 text-sm font-medium rounded-md ${
+                    webinar.isLive
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {webinar.isLive ? 'Join Live Session' : 'Not Available'}
+                </button>
               </div>
-
-              <p className="text-sm text-gray-600 mb-4">{webinar.description}</p>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Instructor:</span>
-                  <span className="text-gray-900">{webinar.instructor}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Date:</span>
-                  <span className="text-gray-900">{webinar.date}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Time:</span>
-                  <span className="text-gray-900">{webinar.time}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Duration:</span>
-                  <span className="text-gray-900">{webinar.duration}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Participants:</span>
-                  <span className="text-gray-900">{webinar.participants}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => handleJoinWebinar(webinar.id)}
-                disabled={webinar.status === 'completed'}
-                className={`w-full px-4 py-2 text-sm font-medium rounded-md ${
-                  webinar.status === 'live'
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : webinar.status === 'scheduled'
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                {webinar.status === 'live' ? 'Join Live Session' :
-                 webinar.status === 'scheduled' ? 'Set Reminder' : 'Recording Available'}
-              </button>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {selectedWebinar && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Webinar Session</h3>
+                <h3 className="text-lg font-medium text-gray-900">{selectedWebinar.title}</h3>
                 <button
                   onClick={() => setSelectedWebinar(null)}
                   className="text-gray-400 hover:text-gray-600"
@@ -167,32 +188,31 @@ export default function StudentWebinarsPage() {
 
                 <div>
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">Participants (25)</h4>
+                    <h4 className="text-sm font-medium text-gray-900 mb-3">
+                      Participants ({selectedWebinar.participants.length})
+                    </h4>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {Array.from({ length: 8 }, (_, i) => (
-                        <div key={i} className="flex items-center space-x-2">
-                          <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                            <span className="text-xs font-medium text-gray-700">
-                              {String.fromCharCode(65 + i)}
-                            </span>
+                      {selectedWebinar.participants.length === 0 ? (
+                        <p className="text-sm text-gray-500">No participants yet</p>
+                      ) : (
+                        selectedWebinar.participants.map((participant, i) => (
+                          <div key={i} className="flex items-center space-x-2">
+                            <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-medium text-gray-700">
+                                {participant.substring(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-sm text-gray-700">{participant}</span>
                           </div>
-                          <span className="text-sm text-gray-700">Participant {i + 1}</span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
 
                   <div className="mt-4 bg-gray-50 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-gray-900 mb-3">Chat</h4>
                     <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
-                      <div className="text-xs">
-                        <span className="font-medium text-gray-900">John:</span>
-                        <span className="text-gray-700 ml-1">Great session!</span>
-                      </div>
-                      <div className="text-xs">
-                        <span className="font-medium text-gray-900">Jane:</span>
-                        <span className="text-gray-700 ml-1">Thanks for the explanation</span>
-                      </div>
+                      <div className="text-xs text-gray-500">Chat messages will appear here</div>
                     </div>
                     <div className="flex space-x-2">
                       <input
