@@ -75,8 +75,8 @@ class WebRTCHandler extends EventEmitter {
       this.handleQualityPreference(socket, data);
     });
 
-    socket.on('disconnect', () => {
-      this.cleanupPeerConnection(socket.id);
+    socket.on('disconnect', async () => {
+      await this.cleanupPeerConnection(socket.id);
     });
   }
 
@@ -117,7 +117,7 @@ class WebRTCHandler extends EventEmitter {
       });
 
       // Store in Redis for persistence across server instances
-      await redisClient.set(
+      await this.redis.set(
         `webrtc:offer:${connectionId}`,
         JSON.stringify({ offer, streamType, timestamp: Date.now() }),
         { EX: 300 } // 5 minutes TTL
@@ -150,7 +150,7 @@ class WebRTCHandler extends EventEmitter {
       });
 
       // Store in Redis
-      await redisClient.set(
+      await this.redis.set(
         `webrtc:answer:${connectionId}`,
         JSON.stringify({ answer, timestamp: Date.now() }),
         { EX: 300 }
@@ -218,7 +218,7 @@ class WebRTCHandler extends EventEmitter {
     });
 
     // Store in Redis for load balancing
-    await redisClient.set(
+    await this.redis.set(
       `streaming:${sessionId}`,
       JSON.stringify(streamingSession),
       { EX: 3600 } // 1 hour
@@ -246,7 +246,7 @@ class WebRTCHandler extends EventEmitter {
 
     // Cleanup
     this.streamingSessions.delete(sessionId);
-    await redisClient.del(`streaming:${sessionId}`);
+    await this.redis.del(`streaming:${sessionId}`);
 
     socket.emit('streaming-stopped', { sessionId });
   }
@@ -348,23 +348,24 @@ class WebRTCHandler extends EventEmitter {
 
   async validatePeerConnection(initiatorId, targetId, webinarId) {
     // Check if both participants are in the same webinar
-    const initiatorInWebinar = await redisClient.sismember(`webinar:${webinarId}:participants`, initiatorId);
-    const targetInWebinar = await redisClient.sismember(`webinar:${webinarId}:participants`, targetId);
+    const initiatorInWebinar = await this.redis.sIsMember(`webinar:${webinarId}:participants`, initiatorId);
+    const targetInWebinar = await this.redis.sIsMember(`webinar:${webinarId}:participants`, targetId);
 
     return initiatorInWebinar && targetInWebinar;
   }
 
   async validateStreamingPermission(participantId, webinarId, streamType) {
     // Check if participant has streaming permission
-    const isHost = await this.redis.get(`webinar:${webinarId}:host`) === participantId;
-    const isPresenter = await this.redis.sismember(`webinar:${webinarId}:presenters`, participantId);
-    const isModerator = await this.redis.sismember(`webinar:${webinarId}:moderators`, participantId);
-    
+    const host = await this.redis.get(`webinar:${webinarId}:host`);
+    const isHost = host === participantId;
+    const isPresenter = await this.redis.sIsMember(`webinar:${webinarId}:presenters`, participantId);
+    const isModerator = await this.redis.sIsMember(`webinar:${webinarId}:moderators`, participantId);
+
     // Screen sharing only for authorized users
     if (streamType === 'screen') {
       return isHost || isPresenter || isModerator;
     }
-    
+
     // Video/audio streaming based on webinar settings
     const settings = await this.redis.get(`webinar:${webinarId}:settings`);
     if (settings) {
@@ -376,7 +377,7 @@ class WebRTCHandler extends EventEmitter {
         return isHost || isPresenter || isModerator;
       }
     }
-    
+
     return true;
   }
 
@@ -386,7 +387,7 @@ class WebRTCHandler extends EventEmitter {
     return sockets.find(socket => socket.participantId === participantId);
   }
 
-  cleanupPeerConnection(socketId) {
+  async cleanupPeerConnection(socketId) {
     // Remove all peer connections associated with this socket
     for (const [connectionId, connection] of this.peerConnections.entries()) {
       if (connection.initiator === socketId || connection.target === socketId) {
@@ -398,7 +399,7 @@ class WebRTCHandler extends EventEmitter {
     for (const [sessionId, session] of this.streamingSessions.entries()) {
       if (session.participantId === socketId) {
         this.streamingSessions.delete(sessionId);
-        this.redis.del(`streaming:${sessionId}`);
+        await this.redis.del(`streaming:${sessionId}`);
       }
     }
   }
