@@ -135,6 +135,11 @@ export default function WebinarsPage() {
     }
   };
 
+  const handleJoinWebinar = (webinarId: string) => {
+    // Navigate to webinar room page
+    window.location.href = `/student/webinars/${webinarId}`;
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -333,7 +338,18 @@ export default function WebinarsPage() {
                           Start
                         </button>
                       )}
-                      <button className="text-blue-600 hover:text-blue-900 text-sm font-medium">
+                      <button
+                        onClick={() => handleJoinWebinar(webinar.id)}
+                        disabled={!webinar.isLive}
+                        className={`text-sm font-medium px-3 py-1 rounded ${
+                          webinar.isLive
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {webinar.isLive ? 'Join' : 'Not Live'}
+                      </button>
+                      <button className="text-blue-600 hover:text-blue-900 text-sm font-medium ml-2">
                         Manage
                       </button>
                     </div>

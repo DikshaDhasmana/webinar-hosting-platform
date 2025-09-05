@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,7 +20,13 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/admin'); // Redirect to admin dashboard after login
+      // Redirect based on user role
+      const userRole = user?.role;
+      if (userRole === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/student');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

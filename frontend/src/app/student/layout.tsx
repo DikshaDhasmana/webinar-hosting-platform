@@ -14,10 +14,14 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.push('/login');
+      } else if (user?.role !== 'student') {
+        router.push('/admin'); // Redirect non-student users to admin portal
+      }
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   const handleLogout = () => {
     logout();

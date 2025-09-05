@@ -50,9 +50,8 @@ export default function StudentWebinarsPage() {
 
   const handleJoinWebinar = (webinar: Webinar) => {
     if (webinar.isLive) {
-      setSelectedWebinar(webinar);
-      // TODO: Implement WebRTC connection
-      console.log('Joining webinar:', webinar.id);
+      // Navigate to webinar room page
+      window.location.href = `/student/webinars/${webinar.id}`;
     }
   };
 

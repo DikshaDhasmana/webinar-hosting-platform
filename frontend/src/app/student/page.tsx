@@ -75,8 +75,8 @@ export default function StudentDashboard() {
   };
 
   const handleJoinWebinar = (webinarId: string) => {
-    // Navigate to webinar room or implement join logic
-    console.log('Joining webinar:', webinarId);
+    // Navigate to webinar room page
+    window.location.href = `/student/webinars/${webinarId}`;
   };
 
   const handleWatchRecording = (webinarId: string) => {
@@ -102,55 +102,55 @@ export default function StudentDashboard() {
         <p className="mt-1 text-sm text-gray-600">Access your webinars and learning materials</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">W</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">W</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Enrolled Webinars</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.enrolledWebinars}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.enrolledWebinars}</dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">C</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">C</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Completed</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.completedWebinars}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.completedWebinars}</dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">R</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">R</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Available Recordings</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.availableRecordings}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.availableRecordings}</dd>
                 </dl>
               </div>
             </div>
@@ -185,7 +185,7 @@ export default function StudentDashboard() {
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{webinar.title}</div>
                             <div className="text-sm text-gray-500">
-                              {webinar.participants.length} participants • Created {new Date(webinar.createdAt).toLocaleDateString()}
+                              {(webinar.participants?.length || 0)} participants • Created {new Date(webinar.createdAt).toLocaleDateString()}
                             </div>
                           </div>
                         </div>

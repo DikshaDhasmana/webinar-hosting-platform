@@ -7,6 +7,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  role: string;
   createdAt: string;
 }
 
@@ -52,6 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             id: decoded.userId,
             name: decoded.name || '',
             email: decoded.email || '',
+            role: decoded.role || 'student',
             createdAt: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : ''
           });
         } else {
@@ -81,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const data = await response.json();
-      const { token: newToken, userId, name, email: userEmail } = data;
+      const { token: newToken, userId, name, email: userEmail, role } = data;
 
       localStorage.setItem('token', newToken);
       setToken(newToken);
@@ -89,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: userId,
         name,
         email: userEmail,
+        role,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -121,6 +124,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: userId,
         name,
         email,
+        role: 'student', // New users default to student role
         createdAt: new Date().toISOString()
       });
     } catch (error) {

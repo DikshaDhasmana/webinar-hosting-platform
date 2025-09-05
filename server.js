@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, required: true, unique: true },
   password: String,
+  role: { type: String, enum: ['admin', 'student'], default: 'student' },
   createdAt: Date
 });
 const User = mongoose.model('User', userSchema);
@@ -161,6 +162,7 @@ const authenticateToken = async (req, res, next) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role || 'student',
       createdAt: user.createdAt
     };
 
@@ -304,15 +306,17 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-
     const user = JSON.parse(userData);
+
+    // Generate JWT token
+    const token = jwt.sign({ userId, role: user.role || 'student' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
     res.json({
       message: 'Login successful',
       userId,
       name: user.name,
       email: user.email,
+      role: user.role || 'student',
       token
     });
   } catch (error) {
@@ -819,6 +823,7 @@ async function createDefaultAdminUser() {
       id: userId,
       name: adminName,
       email: adminEmail,
+      role: 'admin',
       createdAt: Date.now()
     };
     

@@ -38,7 +38,7 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
+const fetchDashboardData = async () => {
     try {
       // Fetch webinars
       const webinarsResponse = await fetch('/api/webinars', {
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
         const totalWebinars = webinars.length;
         const liveWebinars = webinars.filter((w: Webinar) => w.isLive).length;
         const activeParticipants = webinars.reduce((total: number, w: Webinar) =>
-          total + w.participants.length, 0
+          total + (w.participants?.length || 0), 0
         );
         const totalViews = activeParticipants * 2; // Placeholder calculation
 
@@ -71,6 +71,11 @@ export default function AdminDashboard() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleJoinWebinar = (webinarId: string) => {
+    // Navigate to webinar room page
+    window.location.href = `/student/webinars/${webinarId}`;
   };
 
   if (isLoading) {
@@ -91,73 +96,73 @@ export default function AdminDashboard() {
         <p className="mt-1 text-sm text-gray-600">Manage your webinars and participants</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">W</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">W</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Webinars</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.totalWebinars}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.totalWebinars}</dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">P</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">P</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Active Participants</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.activeParticipants}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.activeParticipants}</dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">L</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">L</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Live Webinars</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.liveWebinars}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.liveWebinars}</dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
+        <div className="bg-white overflow-hidden shadow-lg rounded-xl hover:shadow-xl transition-all duration-300 border border-gray-100">
+          <div className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">V</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-lg font-bold">V</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Views</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.totalViews.toLocaleString()}</dd>
+                  <dd className="text-2xl font-bold text-gray-900 mt-1">{stats.totalViews.toLocaleString()}</dd>
                 </dl>
               </div>
             </div>
@@ -194,7 +199,7 @@ export default function AdminDashboard() {
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{webinar.title}</div>
                           <div className="text-sm text-gray-500">
-                            {webinar.participants.length} participants • Created {new Date(webinar.createdAt).toLocaleDateString()}
+                            {(webinar.participants?.length || 0)} participants • Created {new Date(webinar.createdAt).toLocaleDateString()}
                           </div>
                         </div>
                       </div>
