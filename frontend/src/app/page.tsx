@@ -41,7 +41,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {/* Admin Portal Card */}
           <div className="bg-white rounded-lg shadow-lg p-8 hover:shadow-xl transition-shadow">
             <div className="w-16 h-16 bg-blue-500 rounded-lg flex items-center justify-center mb-6 mx-auto">
@@ -58,6 +58,15 @@ export default function Home() {
               className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
             >
               Admin Login
+            </Link>
+          </div>
+          {/* Signup Button */}
+          <div className="flex items-center justify-center mt-8">
+            <Link
+              href="/signup"
+              className="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+            >
+              Sign Up
             </Link>
           </div>
 

@@ -1,63 +1,29 @@
-// Webinar class for in-memory operations
-class Webinar {
-  constructor(id, title, hostId, maxParticipants) {
-    this.id = id;
-    this.title = title;
-    this.hostId = hostId;
-    this.hostName = '';
-    this.maxParticipants = maxParticipants;
-    this.settings = {};
-    this.createdAt = new Date();
-    this.isLive = false;
-    this.startTime = null;
-    this.endTime = null;
-    this.participants = new Set();
-    this.presenters = new Set();
-    this.moderators = new Set();
-  }
+const mongoose = require('mongoose');
 
-  addParticipant(participantId, role = 'attendee') {
-    if (this.participants.size >= this.maxParticipants) {
-      throw new Error('Webinar is at maximum capacity');
-    }
-    this.participants.add(participantId);
-    if (role === 'presenter') {
-      this.presenters.add(participantId);
-    } else if (role === 'moderator') {
-      this.moderators.add(participantId);
-    }
-  }
+const webinarSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  title: { type: String, required: true },
+  description: String,
+  scheduledDate: { type: Date, required: true },
+  startTime: { type: Date, required: true },
+  endTime: { type: Date, required: true },
+  createdBy: { type: String, required: true }, // Admin ID
+  status: { type: String, enum: ['scheduled', 'live', 'ended'], default: 'scheduled' },
+  maxParticipants: { type: Number, default: 500 },
+  registeredStudents: [{ type: String }], // Array of student IDs
+  settings: {
+    allowRecording: { type: Boolean, default: true },
+    requireRegistration: { type: Boolean, default: true },
+    enableChat: { type: Boolean, default: true },
+    enableQandA: { type: Boolean, default: true }
+  },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
 
-  removeParticipant(participantId) {
-    this.participants.delete(participantId);
-    this.presenters.delete(participantId);
-    this.moderators.delete(participantId);
-  }
+// Index for faster queries
+webinarSchema.index({ createdBy: 1 });
+webinarSchema.index({ status: 1 });
+webinarSchema.index({ scheduledDate: 1 });
 
-  canUserSpeak(participantId) {
-    return this.presenters.has(participantId) ||
-           this.moderators.has(participantId) ||
-           this.hostId === participantId;
-  }
-
-  getStats() {
-    return {
-      id: this.id,
-      title: this.title,
-      hostId: this.hostId,
-      hostName: this.hostName,
-      maxParticipants: this.maxParticipants,
-      settings: this.settings,
-      createdAt: this.createdAt,
-      isLive: this.isLive,
-      startTime: this.startTime,
-      endTime: this.endTime,
-      participantCount: this.participants.size,
-      participants: Array.from(this.participants),
-      presenters: Array.from(this.presenters),
-      moderators: Array.from(this.moderators)
-    };
-  }
-}
-
-module.exports = Webinar;
+module.exports = mongoose.model('Webinar', webinarSchema);

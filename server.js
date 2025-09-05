@@ -236,8 +236,8 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid role. Must be admin or student' });
     }
 
-    // Check if user already exists
-    const existingUser = await redisClient.get(`user:email:${email}`);
+    // Check if user already exists in MongoDB
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
@@ -248,19 +248,29 @@ app.post('/api/auth/register', async (req, res) => {
     // Create user ID
     const userId = uuidv4();
 
-    // Store user data in Redis
+    // Create new user in MongoDB
+    const newUser = new User({
+      id: userId,
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      createdAt: new Date()
+    });
+
+    await newUser.save();
+
+    // Store user data in Redis for session management (short-term cache)
     const userData = {
       id: userId,
       name,
       email,
       role,
-      createdAt: Date.now()
+      createdAt: newUser.createdAt.getTime()
     };
 
-    // Store user data
     await redisClient.set(`user:${userId}`, JSON.stringify(userData), { EX: 86400 }); // 24 hours
     await redisClient.set(`user:email:${email}`, userId, { EX: 86400 }); // For email lookup
-    await redisClient.set(`user:password:${userId}`, hashedPassword, { EX: 86400 }); // Store hashed password
 
     // Generate JWT token
     const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
