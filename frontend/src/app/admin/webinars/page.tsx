@@ -136,8 +136,8 @@ export default function WebinarsPage() {
   };
 
   const handleJoinWebinar = (webinarId: string) => {
-    // Navigate to webinar room page
-    window.location.href = `/student/webinars/${webinarId}`;
+    // Navigate to admin webinar room page
+    window.location.href = `/admin/webinars/${webinarId}`;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -301,8 +301,8 @@ export default function WebinarsPage() {
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
-            {webinars.map((webinar) => (
-              <li key={webinar.id}>
+            {webinars.map((webinar, index) => (
+              <li key={webinar.id || index}>
                 <div className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">

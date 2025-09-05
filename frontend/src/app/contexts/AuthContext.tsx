@@ -15,7 +15,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, role?: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -42,29 +42,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Check for stored token on mount
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      try {
-        const decoded: any = jwtDecode(storedToken);
-        // Check if token is expired
-        if (decoded.exp * 1000 > Date.now()) {
-          setToken(storedToken);
-          setUser({
-            id: decoded.userId,
-            name: decoded.name || '',
-            email: decoded.email || '',
-            role: decoded.role || 'student',
-            createdAt: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : ''
-          });
-        } else {
+    const checkStoredToken = async () => {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        try {
+          const decoded: any = jwtDecode(storedToken);
+          // Check if token is expired
+          if (decoded.exp * 1000 > Date.now()) {
+            setToken(storedToken);
+            setUser({
+              id: decoded.userId,
+              name: decoded.name || '',
+              email: decoded.email || '',
+              role: decoded.role || 'student',
+              createdAt: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : ''
+            });
+          } else {
+            localStorage.removeItem('token');
+          }
+        } catch (error) {
+          console.error('Error decoding token:', error);
           localStorage.removeItem('token');
         }
-      } catch (error) {
-        console.error('Error decoding token:', error);
-        localStorage.removeItem('token');
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    checkStoredToken();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -100,14 +104,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const signup = async (name: string, email: string, password: string) => {
+  const signup = async (name: string, email: string, password: string, role: string = 'student') => {
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, role }),
       });
 
       if (!response.ok) {
@@ -124,7 +128,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: userId,
         name,
         email,
-        role: 'student', // New users default to student role
+        role,
         createdAt: new Date().toISOString()
       });
     } catch (error) {

@@ -224,11 +224,16 @@ app.post('/api/webinars', authenticateToken, async (req, res) => {
 // User Registration
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role = 'student' } = req.body;
 
     // Validate input
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    // Validate role
+    if (!['admin', 'student'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be admin or student' });
     }
 
     // Check if user already exists
@@ -248,6 +253,7 @@ app.post('/api/auth/register', async (req, res) => {
       id: userId,
       name,
       email,
+      role,
       createdAt: Date.now()
     };
 
@@ -257,13 +263,14 @@ app.post('/api/auth/register', async (req, res) => {
     await redisClient.set(`user:password:${userId}`, hashedPassword, { EX: 86400 }); // Store hashed password
 
     // Generate JWT token
-    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({
       message: 'User registered successfully',
       userId,
       name,
       email,
+      role,
       token
     });
   } catch (error) {
@@ -340,21 +347,21 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Get all webinars for the authenticated user
 app.get('/api/webinars', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const userWebinars = [];
+    const userRole = req.user.role || 'student';
+    const webinarsList = [];
 
-    // Get all webinar keys from Redis that belong to this user
+    // Get all webinar keys from Redis
     const webinarKeys = await redisClient.keys(`webinar:*`);
     for (const key of webinarKeys) {
       const webinarData = await redisClient.get(key);
       if (webinarData) {
         const data = JSON.parse(webinarData);
-        // Only include webinars created by this user
-        if (data.hostId === userId) {
-          userWebinars.push({
+        // For admin, include only webinars created by them
+        if (userRole === 'admin' && data.hostId === userId) {
+          webinarsList.push({
             id: data.id,
             title: data.title,
             hostId: data.hostId,
@@ -365,10 +372,23 @@ app.get('/api/webinars', authenticateToken, async (req, res) => {
             createdAt: data.createdAt
           });
         }
+        // For students, include all webinars
+        else if (userRole === 'student') {
+          webinarsList.push({
+            id: data.id,
+            title: data.title,
+            hostId: data.hostId,
+            hostName: data.hostName,
+            maxParticipants: data.maxParticipants,
+            isLive: false,
+            participants: [],
+            createdAt: data.createdAt
+          });
+        }
       }
     }
 
-    res.json(userWebinars);
+    res.json(webinarsList);
   } catch (error) {
     console.error('Error fetching webinars:', error);
     res.status(500).json({ error: 'Failed to fetch webinars' });
@@ -501,12 +521,23 @@ io.on('connection', async (socket) => {
   socket.on('join-webinar', async (data) => {
     try {
       const { webinarId, role } = data;
-      
+
       // Use authenticated user data
       const participantId = socket.user.id;
       const participantName = socket.user.name;
-      
-      const webinar = webinars.get(webinarId);
+
+      let webinar = webinars.get(webinarId);
+      if (!webinar) {
+        // Try to load from Redis
+        const webinarData = await redisClient.get(`webinar:${webinarId}`);
+        if (webinarData) {
+          const data = JSON.parse(webinarData);
+          webinar = new Webinar(data.id, data.title, data.hostId, data.maxParticipants);
+          Object.assign(webinar.settings, data.settings);
+          webinars.set(webinarId, webinar);
+        }
+      }
+
       if (!webinar) {
         socket.emit('error', { message: 'Webinar not found' });
         return;
@@ -584,10 +615,18 @@ io.on('connection', async (socket) => {
 
       // Rate limiting for chat (10 messages per minute)
       const rateLimitKey = `chat:${currentParticipant.id}`;
-      const messageCount = await redisClient.incr(rateLimitKey);
-      if (messageCount === 1) {
-        await redisClient.expire(rateLimitKey, 60);
+      let messageCount;
+      try {
+        messageCount = await redisClient.incr(rateLimitKey);
+        if (messageCount === 1) {
+          await redisClient.expire(rateLimitKey, 60);
+        }
+      } catch (redisError) {
+        console.error('Redis rate limiting error:', redisError);
+        // Continue without rate limiting if Redis fails
+        messageCount = 1;
       }
+
       if (messageCount > 10) {
         socket.emit('error', { message: 'Chat rate limit exceeded' });
         return;
@@ -595,6 +634,7 @@ io.on('connection', async (socket) => {
 
       const chatMessage = {
         id: uuidv4(),
+        webinarId: currentWebinar.id,
         participantId: currentParticipant.id,
         participantName: currentParticipant.name,
         message: message.trim(),
@@ -602,13 +642,13 @@ io.on('connection', async (socket) => {
         role: currentParticipant.role
       };
 
-      // Store message
+      // Store message in memory
       if (!chatMessages.has(currentWebinar.id)) {
         chatMessages.set(currentWebinar.id, []);
       }
       const messages = chatMessages.get(currentWebinar.id);
       messages.push(chatMessage);
-      
+
       // Keep only last 1000 messages
       if (messages.length > 1000) {
         messages.splice(0, messages.length - 1000);
@@ -617,13 +657,18 @@ io.on('connection', async (socket) => {
       // Broadcast to all participants
       io.to(currentWebinar.id).emit('chat-message', chatMessage);
 
-      // Store in Redis for persistence
-      await redisClient.lpush(`messages:${currentWebinar.id}`, JSON.stringify(chatMessage));
-      await redisClient.ltrim(`messages:${currentWebinar.id}`, 0, 999);
+      // Store in Redis for persistence (don't fail if Redis is down)
+      try {
+        await redisClient.lPush(`messages:${currentWebinar.id}`, JSON.stringify(chatMessage));
+        await redisClient.lTrim(`messages:${currentWebinar.id}`, 0, 999);
+      } catch (redisError) {
+        console.error('Redis storage error (continuing without persistence):', redisError);
+        // Don't emit error to client - message was already sent successfully
+      }
 
     } catch (error) {
       console.error('Error handling chat message:', error);
-      socket.emit('error', { message: 'Failed to send message' });
+      socket.emit('error', { message: 'Failed to send message', details: error.message });
     }
   });
 

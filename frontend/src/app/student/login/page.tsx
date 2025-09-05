@@ -38,12 +38,7 @@ export default function StudentLoginPage() {
 
     try {
       await login(email, password);
-      // Check if user is student
-      if (user?.role === 'student') {
-        router.push('/student');
-      } else {
-        setError('Access denied. Student privileges required.');
-      }
+      // Role check and redirect will happen via useEffect when user state updates
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

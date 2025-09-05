@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,8 +10,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, user } = useAuth();
+  const { login, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Watch for user changes after login
+  useEffect(() => {
+    if (user?.role) {
+      if (user.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/student');
+      }
+    }
+  }, [user, router]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,13 +42,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      // Redirect based on user role
-      const userRole = user?.role;
-      if (userRole === 'admin') {
-        router.push('/admin');
-      } else {
-        router.push('/student');
-      }
+      // Redirect will happen via useEffect when user state updates
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,16 +12,19 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, logout, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading) {
+    // Only redirect if we're not already on the login page
+    if (!isLoading && !pathname.includes('/admin/login')) {
       if (!isAuthenticated) {
         router.push('/admin/login');
       } else if (user?.role !== 'admin') {
-        router.push('/student'); // Redirect non-admin users to student portal
+        // Redirect non-admin users to student dashboard
+        router.push('/student');
       }
     }
-  }, [isAuthenticated, isLoading, user, router]);
+  }, [isAuthenticated, isLoading, user, router, pathname]);
 
   const handleLogout = () => {
     logout();
@@ -40,6 +43,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   if (!isAuthenticated) {
+    // Allow login page to render without layout
+    if (pathname === '/admin/login') {
+      return <>{children}</>;
+    }
     return null;
   }
 

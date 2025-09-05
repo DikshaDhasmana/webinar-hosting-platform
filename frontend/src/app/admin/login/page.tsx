@@ -38,12 +38,7 @@ export default function AdminLoginPage() {
 
     try {
       await login(email, password);
-      // Check if user is admin
-      if (user?.role === 'admin') {
-        router.push('/admin');
-      } else {
-        setError('Access denied. Admin privileges required.');
-      }
+      // Role check and redirect will happen via useEffect when user state updates
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

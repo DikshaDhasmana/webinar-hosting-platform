@@ -18,7 +18,8 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
       if (!isAuthenticated) {
         router.push('/student/login');
       } else if (user?.role !== 'student') {
-        router.push('/admin'); // Redirect non-student users to admin portal
+        // Redirect non-student users to admin dashboard
+        router.push('/admin');
       }
     }
   }, [isAuthenticated, isLoading, user, router]);
