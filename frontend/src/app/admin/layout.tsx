@@ -16,7 +16,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        router.push('/login');
+        router.push('/admin/login');
       } else if (user?.role !== 'admin') {
         router.push('/student'); // Redirect non-admin users to student portal
       }

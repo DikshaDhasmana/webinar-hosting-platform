@@ -54,10 +54,10 @@ export default function Home() {
               Schedule webinars, manage participants, and view analytics for your sessions.
             </p>
             <Link
-              href="/admin"
+              href="/admin/login"
               className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
             >
-              Access Admin Portal
+              Admin Login
             </Link>
           </div>
 
@@ -73,10 +73,10 @@ export default function Home() {
               Join live webinars, access recordings, and track your learning progress.
             </p>
             <Link
-              href="/student"
+              href="/student/login"
               className="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
             >
-              Access Student Portal
+              Student Login
             </Link>
           </div>
         </div>
