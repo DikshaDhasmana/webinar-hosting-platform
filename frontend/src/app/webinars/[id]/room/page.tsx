@@ -156,20 +156,40 @@ export default function WebinarRoom() {
 
   const initializeMedia = async () => {
     try {
+      console.log('Initializing media devices...')
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { width: 1280, height: 720 },
         audio: true
       })
 
+      console.log('Media stream obtained:', stream)
+      console.log('Video tracks:', stream.getVideoTracks())
+      console.log('Audio tracks:', stream.getAudioTracks())
+
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream
+        console.log('Stream assigned to video element')
+
+        // Ensure tracks are enabled
+        stream.getVideoTracks().forEach(track => {
+          track.enabled = true
+          console.log('Video track enabled:', track.label)
+        })
+
+        stream.getAudioTracks().forEach(track => {
+          track.enabled = true
+          console.log('Audio track enabled:', track.label)
+        })
       }
 
       setIsVideoOn(true)
       setIsAudioOn(true)
+      console.log('Media initialization complete')
     } catch (error) {
       console.error('Error accessing media devices:', error)
-      setError('Failed to access camera and microphone')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setError(`Failed to access camera and microphone: ${errorMessage}`)
     }
   }
 
@@ -319,7 +339,6 @@ export default function WebinarRoom() {
                     <video
                       ref={localVideoRef}
                       autoPlay
-                      muted
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute bottom-2 left-2 text-white text-sm">

@@ -217,7 +217,7 @@ router.put('/:id', async (req, res) => {
     }
 
     // Check permissions
-    if (req.user.role !== 'admin' && webinar.host.toString() !== req.user.id) {
+    if (req.user.role !== 'admin' && webinar.host.toString() !== req.user.id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this webinar'
@@ -277,7 +277,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check permissions
-    if (req.user.role !== 'admin' && webinar.host.toString() !== req.user.id) {
+    if (req.user.role !== 'admin' && webinar.host.toString() !== req.user.id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this webinar'
@@ -323,7 +323,13 @@ router.post('/:id/start', async (req, res) => {
     }
 
     // Check if user is the host
-    if (webinar.host.toString() !== req.user.id) {
+    console.log('DEBUG - Start Webinar:');
+    console.log('  Webinar host:', webinar.host.toString());
+    console.log('  User ID:', req.user.id.toString());
+    console.log('  User role:', req.user.role);
+    console.log('  Match check:', webinar.host.toString() === req.user.id.toString());
+
+    if (webinar.host.toString() !== req.user.id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Only the host can start the webinar'
@@ -372,7 +378,7 @@ router.post('/:id/end', async (req, res) => {
     }
 
     // Check if user is the host
-    if (webinar.host.toString() !== req.user.id) {
+    if (webinar.host.toString() !== req.user.id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Only the host can end the webinar'
@@ -487,7 +493,7 @@ router.post('/:id/join', async (req, res) => {
 
     // Determine user role in webinar
     let participantRole = 'attendee';
-    if (webinar.host._id.toString() === req.user.id) {
+    if (webinar.host._id.toString() === req.user.id.toString()) {
       participantRole = 'host';
     }
 
