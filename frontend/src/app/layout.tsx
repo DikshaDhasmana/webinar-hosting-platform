@@ -1,37 +1,17 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import { AuthProvider } from "./contexts/AuthContext";
+import './globals.css'
+import { ReactNode } from 'react'
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+export const metadata = {
+  title: 'Webinar Hosting Platform',
+  description: 'Scalable webinar hosting platform frontend',
+}
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Webinar Hosting Platform",
-  description: "Real-time webinar platform with WebRTC",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+    <html lang="en" className="scroll-smooth">
+      <body className="bg-gradient-to-b from-gray-100 to-white dark:from-black dark:to-black text-gray-900 dark:text-gray-100 min-h-screen">
+        {children}
       </body>
     </html>
-  );
+  )
 }
