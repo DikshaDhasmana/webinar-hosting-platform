@@ -61,6 +61,16 @@ export default function WebinarRoom() {
   const [isRecording, setIsRecording] = useState(false)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [videoError, setVideoError] = useState('')
+
+  // Log participants whenever the list changes
+  useEffect(() => {
+    console.log('=== PARTICIPANTS LIST UPDATED ===')
+    console.log('Total participants:', participants.length)
+    participants.forEach((participant, index) => {
+      console.log(`${index + 1}. ${participant.firstName} ${participant.lastName} (${participant.username}) - Role: ${participant.role}, UserID: ${participant.userId}`)
+    })
+    console.log('================================')
+  }, [participants])
   const [isVideoLoading, setIsVideoLoading] = useState(false)
   const [needsUserInteraction, setNeedsUserInteraction] = useState(false)
   const [isScreenVideoReady, setIsScreenVideoReady] = useState(false)
@@ -89,6 +99,16 @@ export default function WebinarRoom() {
       fetchWebinarDetails(webinarId, token)
     }
   }, [webinarId])
+
+  // Cleanup when component unmounts or user leaves
+  useEffect(() => {
+    return () => {
+      console.log('=== LEAVING WEBINAR ROOM ===')
+      console.log('Room ID:', webinarId)
+      console.log('User:', user?.firstName, user?.lastName, '(UserID:', user?.id + ')')
+      console.log('================================')
+    }
+  }, [webinarId, user])
 
   // Initialize media when video element is mounted and user has joined
   useEffect(() => {
@@ -149,10 +169,14 @@ export default function WebinarRoom() {
     // Define setupSocketListeners function here
     const setupSocketListeners = () => {
       socketService.onParticipantJoined((data) => {
+        console.log('=== PARTICIPANT JOINED ===')
+        console.log('New participant:', data.user.firstName, data.user.lastName, '(UserID:', data.user.userId + ')')
         setParticipants(prev => [...prev, data.user])
       })
 
       socketService.onParticipantLeft((data) => {
+        console.log('=== PARTICIPANT LEFT ===')
+        console.log('Participant left:', data.userId)
         setParticipants(prev => prev.filter(p => p.userId !== data.userId))
       })
 
@@ -185,6 +209,10 @@ export default function WebinarRoom() {
         setPermissions(data.data.participant.permissions)
         setParticipantRole(data.data.participant.role)
         setParticipants(data.data.webinar.participants)
+
+        console.log('=== JOINED WEBINAR ROOM ===')
+        console.log('Room ID:', webinarId)
+        console.log('Initial participants:', data.data.webinar.participants.length)
 
         // Join socket room
         if (webinarId) {
