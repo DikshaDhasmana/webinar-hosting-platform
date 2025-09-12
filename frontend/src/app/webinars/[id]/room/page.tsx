@@ -65,10 +65,13 @@ export default function WebinarRoom() {
   // Log participants whenever the list changes
   useEffect(() => {
     console.log('=== PARTICIPANTS LIST UPDATED ===')
-    console.log('Total participants:', participants?.length || 0)
-    if (participants && participants.length > 0) {
+    const participantCount = Array.isArray(participants) ? participants.length : 0
+    console.log('Total participants:', participantCount)
+    if (Array.isArray(participants) && participants.length > 0) {
       participants.forEach((participant, index) => {
-        console.log(`${index + 1}. ${participant?.firstName || 'Unknown'} ${participant?.lastName || 'User'} (${participant?.username || 'N/A'}) - Role: ${participant?.role || 'N/A'}, UserID: ${participant?.userId || 'N/A'}`)
+        if (participant) {
+          console.log(`${index + 1}. ${participant?.firstName || 'Unknown'} ${participant?.lastName || 'User'} (${participant?.username || 'N/A'}) - Role: ${participant?.role || 'N/A'}, UserID: ${participant?.userId || 'N/A'}`)
+        }
       })
     }
     console.log('================================')
@@ -172,19 +175,27 @@ export default function WebinarRoom() {
       const setupSocketListeners = () => {
         socketService.onParticipantJoined((data) => {
           console.log('=== PARTICIPANT JOINED ===')
-          console.log('New participant:', data.user.firstName, data.user.lastName, '(UserID:', data.user.userId + ')')
-          // Normalize participant object to have userId property
-          const normalizedParticipant = {
-            ...data.user,
-            userId: data.user.id || data.user.userId
+          if (data?.user) {
+            console.log('New participant:', data.user.firstName, data.user.lastName, '(UserID:', data.user.userId + ')')
+            // Normalize participant object to have userId property
+            const normalizedParticipant = {
+              ...data.user,
+              userId: data.user.id || data.user.userId
+            }
+            setParticipants(prev => Array.isArray(prev) ? [...prev, normalizedParticipant] : [normalizedParticipant])
+          } else {
+            console.error('Invalid participant joined data:', data)
           }
-          setParticipants(prev => [...prev, normalizedParticipant])
         })
 
         socketService.onParticipantLeft((data) => {
           console.log('=== PARTICIPANT LEFT ===')
-          console.log('Participant left:', data.userId)
-          setParticipants(prev => prev.filter(p => p.userId !== data.userId))
+          if (data?.userId) {
+            console.log('Participant left:', data.userId)
+            setParticipants(prev => Array.isArray(prev) ? prev.filter(p => p?.userId !== data.userId) : [])
+          } else {
+            console.error('Invalid participant left data:', data)
+          }
         })
 
       socketService.onNewMessage((message) => {
@@ -215,11 +226,11 @@ export default function WebinarRoom() {
         setWebinar(data.data.webinar)
         setPermissions(data.data.participant.permissions)
         setParticipantRole(data.data.participant.role)
-        setParticipants(data.data.webinar.participants || [])
+        setParticipants([]) // Participants are managed via socket events
 
         console.log('=== JOINED WEBINAR ROOM ===')
         console.log('Room ID:', webinarId)
-        console.log('Initial participants:', data.data.webinar.participants.length)
+        console.log('Initial participants:', data.data.webinar.participantCount || 0)
 
         // Join socket room
         if (webinarId) {
@@ -621,7 +632,7 @@ export default function WebinarRoom() {
         <div>
           <h1 className="text-xl font-bold">{webinar.title}</h1>
           <p className="text-sm text-gray-300">
-            Host: {webinar.host?.firstName} {webinar.host?.lastName} • {participants?.length || 0}/{webinar.maxParticipants} participants
+            Host: {webinar.host?.firstName} {webinar.host?.lastName} • {Array.isArray(participants) ? participants.length : 0}/{webinar.maxParticipants} participants
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -888,21 +899,25 @@ export default function WebinarRoom() {
         <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
           {/* Participants */}
           <div className="p-4 border-b border-gray-700">
-            <h3 className="text-lg font-semibold mb-3">Participants ({participants?.length || 0})</h3>
+            <h3 className="text-lg font-semibold mb-3">Participants ({Array.isArray(participants) ? participants.length : 0})</h3>
             <div className="space-y-2 max-h-40 overflow-y-auto">
-              {participants?.map((participant, index) => (
-                <div key={index} className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium">
-                      {participant.firstName?.charAt(0) || '?'}
-                    </span>
+              {Array.isArray(participants) && participants.length > 0 ? (
+                participants.map((participant, index) => (
+                  <div key={participant?.userId || index} className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium">
+                        {participant?.firstName?.charAt(0) || '?'}
+                      </span>
+                    </div>
+                    <span className="text-sm">{participant?.firstName || 'Unknown'} {participant?.lastName || 'User'}</span>
+                    {participant?.role === 'host' && (
+                      <span className="text-xs bg-blue-600 px-2 py-1 rounded">Host</span>
+                    )}
                   </div>
-                  <span className="text-sm">{participant.firstName} {participant.lastName}</span>
-                  {participant.role === 'host' && (
-                    <span className="text-xs bg-blue-600 px-2 py-1 rounded">Host</span>
-                  )}
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-gray-400 text-sm">No participants yet</p>
+              )}
             </div>
           </div>
 
