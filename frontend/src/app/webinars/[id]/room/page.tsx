@@ -173,6 +173,24 @@ export default function WebinarRoom() {
 
     // Define setupSocketListeners function here
       const setupSocketListeners = () => {
+        // Handle initial room join with participants list
+        socketService.onRoomJoined((data) => {
+          console.log('=== ROOM JOINED ===')
+          console.log('Room ID:', data.roomId)
+          console.log('Initial participants count:', data.participants?.length || 0)
+          if (data.participants && Array.isArray(data.participants)) {
+            // Normalize all participants to have userId property
+            const normalizedParticipants = data.participants.map(participant => ({
+              ...participant,
+              userId: participant.id || participant.userId
+            }))
+            setParticipants(normalizedParticipants)
+            console.log('Set initial participants:', normalizedParticipants.length)
+          } else {
+            setParticipants([])
+          }
+        })
+
         socketService.onParticipantJoined((data) => {
           console.log('=== PARTICIPANT JOINED ===')
           if (data?.user) {
@@ -182,7 +200,15 @@ export default function WebinarRoom() {
               ...data.user,
               userId: data.user.id || data.user.userId
             }
-            setParticipants(prev => Array.isArray(prev) ? [...prev, normalizedParticipant] : [normalizedParticipant])
+            setParticipants(prev => {
+              // Check if participant already exists to avoid duplicates
+              const exists = prev.some(p => p?.userId === normalizedParticipant.userId)
+              if (exists) {
+                console.log('Participant already exists, skipping duplicate')
+                return prev
+              }
+              return Array.isArray(prev) ? [...prev, normalizedParticipant] : [normalizedParticipant]
+            })
           } else {
             console.error('Invalid participant joined data:', data)
           }

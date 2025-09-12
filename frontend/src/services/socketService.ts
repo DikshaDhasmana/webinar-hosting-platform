@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 
 export interface Participant {
+  id?: string
   userId: string
   socketId: string
   username: string
