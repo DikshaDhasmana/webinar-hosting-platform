@@ -142,6 +142,8 @@ class SocketHandler {
       // Get current room participants
       const participants = await this.getRoomParticipants(roomId);
 
+      logger.info(`Room ${roomId} participants after join:`, participants);
+
       // Notify others about new participant
       socket.to(roomId).emit('participant-joined', {
         user: {
@@ -154,6 +156,7 @@ class SocketHandler {
       });
 
       // Send room state to joining user
+      logger.info(`Emitting room-joined to ${socket.user.username} with ${participants.length} participants`);
       socket.emit('room-joined', {
         roomId,
         webinar: {

@@ -175,18 +175,23 @@ export default function WebinarRoom() {
       const setupSocketListeners = () => {
         // Handle initial room join with participants list
         socketService.onRoomJoined((data) => {
-          console.log('=== ROOM JOINED ===')
+          console.log('=== ROOM JOINED EVENT RECEIVED ===')
           console.log('Room ID:', data.roomId)
-          console.log('Initial participants count:', data.participants?.length || 0)
+          console.log('Participants data:', data.participants)
+          console.log('Participants count:', data.participants?.length || 0)
+          console.log('Participants type:', Array.isArray(data.participants) ? 'Array' : typeof data.participants)
+
           if (data.participants && Array.isArray(data.participants)) {
             // Normalize all participants to have userId property
             const normalizedParticipants = data.participants.map(participant => ({
               ...participant,
               userId: participant.id || participant.userId
             }))
+            console.log('Normalized participants:', normalizedParticipants)
             setParticipants(normalizedParticipants)
             console.log('Set initial participants:', normalizedParticipants.length)
           } else {
+            console.log('No participants array received, setting empty array')
             setParticipants([])
           }
         })
@@ -238,6 +243,9 @@ export default function WebinarRoom() {
       // Connect to socket first
       await socketService.connect(token)
 
+      // Set up socket event listeners BEFORE joining room
+      setupSocketListeners()
+
       const response = await fetch(`http://localhost:5000/api/webinars/${webinar._id}/join`, {
         method: 'POST',
         headers: {
@@ -258,13 +266,10 @@ export default function WebinarRoom() {
         console.log('Room ID:', webinarId)
         console.log('Initial participants:', data.data.webinar.participantCount || 0)
 
-        // Join socket room
+        // Join socket room AFTER listeners are set up
         if (webinarId) {
           socketService.joinRoom({ roomId: webinarId })
         }
-
-        // Set up socket event listeners
-        setupSocketListeners()
       } else {
         setError(data.message || 'Failed to join webinar')
       }
