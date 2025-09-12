@@ -65,10 +65,12 @@ export default function WebinarRoom() {
   // Log participants whenever the list changes
   useEffect(() => {
     console.log('=== PARTICIPANTS LIST UPDATED ===')
-    console.log('Total participants:', participants.length)
-    participants.forEach((participant, index) => {
-      console.log(`${index + 1}. ${participant.firstName} ${participant.lastName} (${participant.username}) - Role: ${participant.role}, UserID: ${participant.userId}`)
-    })
+    console.log('Total participants:', participants?.length || 0)
+    if (participants && participants.length > 0) {
+      participants.forEach((participant, index) => {
+        console.log(`${index + 1}. ${participant?.firstName || 'Unknown'} ${participant?.lastName || 'User'} (${participant?.username || 'N/A'}) - Role: ${participant?.role || 'N/A'}, UserID: ${participant?.userId || 'N/A'}`)
+      })
+    }
     console.log('================================')
   }, [participants])
   const [isVideoLoading, setIsVideoLoading] = useState(false)
@@ -105,7 +107,7 @@ export default function WebinarRoom() {
     return () => {
       console.log('=== LEAVING WEBINAR ROOM ===')
       console.log('Room ID:', webinarId)
-      console.log('User:', user?.firstName, user?.lastName, '(UserID:', user?.id + ')')
+      console.log('User:', user?.firstName || 'Unknown', user?.lastName || 'User', '(UserID:', user?.id || 'N/A' + ')')
       console.log('================================')
     }
   }, [webinarId, user])
@@ -167,18 +169,23 @@ export default function WebinarRoom() {
     setError('')
 
     // Define setupSocketListeners function here
-    const setupSocketListeners = () => {
-      socketService.onParticipantJoined((data) => {
-        console.log('=== PARTICIPANT JOINED ===')
-        console.log('New participant:', data.user.firstName, data.user.lastName, '(UserID:', data.user.userId + ')')
-        setParticipants(prev => [...prev, data.user])
-      })
+      const setupSocketListeners = () => {
+        socketService.onParticipantJoined((data) => {
+          console.log('=== PARTICIPANT JOINED ===')
+          console.log('New participant:', data.user.firstName, data.user.lastName, '(UserID:', data.user.userId + ')')
+          // Normalize participant object to have userId property
+          const normalizedParticipant = {
+            ...data.user,
+            userId: data.user.id || data.user.userId
+          }
+          setParticipants(prev => [...prev, normalizedParticipant])
+        })
 
-      socketService.onParticipantLeft((data) => {
-        console.log('=== PARTICIPANT LEFT ===')
-        console.log('Participant left:', data.userId)
-        setParticipants(prev => prev.filter(p => p.userId !== data.userId))
-      })
+        socketService.onParticipantLeft((data) => {
+          console.log('=== PARTICIPANT LEFT ===')
+          console.log('Participant left:', data.userId)
+          setParticipants(prev => prev.filter(p => p.userId !== data.userId))
+        })
 
       socketService.onNewMessage((message) => {
         setChatMessages(prev => [...prev, message])
@@ -208,7 +215,7 @@ export default function WebinarRoom() {
         setWebinar(data.data.webinar)
         setPermissions(data.data.participant.permissions)
         setParticipantRole(data.data.participant.role)
-        setParticipants(data.data.webinar.participants)
+        setParticipants(data.data.webinar.participants || [])
 
         console.log('=== JOINED WEBINAR ROOM ===')
         console.log('Room ID:', webinarId)
